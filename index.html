@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cat Fireball Game</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            cursor: crosshair;
+        }
+
+        #game-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+        }
+
+        #cat {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 100px;
+            height: 100px;
+            transition: transform 0.1s;
+        }
+
+        #cat img {
+            width: 100%;
+            height: 100%;
+        }
+
+        .fireball {
+            position: absolute;
+            width: 40px;
+            height: 40px;
+            pointer-events: none;
+        }
+
+        .fireball svg {
+            width: 100%;
+            height: 100%;
+        }
+
+        .dust {
+            position: absolute;
+            width: 60px;
+            height: 60px;
+            pointer-events: none;
+            animation: dustExplosion 0.6s ease-out forwards;
+        }
+
+        .dust svg {
+            width: 100%;
+            height: 100%;
+        }
+
+        @keyframes dustExplosion {
+            0% {
+                transform: scale(0.5);
+                opacity: 1;
+            }
+            100% {
+                transform: scale(2);
+                opacity: 0;
+            }
+        }
+
+        /* Border indicators */
+        .border {
+            position: absolute;
+            background: rgba(255, 255, 255, 0.3);
+            pointer-events: none;
+        }
+
+        .border.top {
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+        }
+
+        .border.bottom {
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+        }
+
+        .border.left {
+            top: 0;
+            left: 0;
+            bottom: 0;
+            width: 2px;
+        }
+
+        .border.right {
+            top: 0;
+            right: 0;
+            bottom: 0;
+            width: 2px;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <!-- Border indicators -->
+        <div class="border top"></div>
+        <div class="border bottom"></div>
+        <div class="border left"></div>
+        <div class="border right"></div>
+
+        <!-- Cat element -->
+        <div id="cat">
+            <img src="images/cat.svg" alt="cat">
+        </div>
+    </div>
+
+    <!-- Template SVGs (hidden) -->
+    <div style="display: none;">
+        <!-- Fireball SVG template -->
+        <svg id="fireball-template" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="50" cy="50" r="45" fill="#ff4444"/>
+            <circle cx="50" cy="50" r="35" fill="#ff8800"/>
+            <circle cx="50" cy="50" r="25" fill="#ffcc00"/>
+        </svg>
+
+        <!-- Dust SVG template -->
+        <svg id="dust-template" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="30" cy="30" r="15" fill="#999" opacity="0.6"/>
+            <circle cx="70" cy="40" r="20" fill="#bbb" opacity="0.5"/>
+            <circle cx="50" cy="70" r="18" fill="#888" opacity="0.6"/>
+            <circle cx="40" cy="50" r="12" fill="#aaa" opacity="0.5"/>
+        </svg>
+    </div>
+
+    <script>
+        const gameContainer = document.getElementById('game-container');
+        const cat = document.getElementById('cat');
+        const fireballs = [];
+
+        // Get cat center position
+        function getCatPosition() {
+            const rect = cat.getBoundingClientRect();
+            return {
+                x: rect.left + rect.width / 2,
+                y: rect.top + rect.height / 2
+            };
+        }
+
+        // Create fireball element
+        function createFireball(startX, startY, targetX, targetY) {
+            const fireball = document.createElement('div');
+            fireball.className = 'fireball';
+            fireball.style.left = startX + 'px';
+            fireball.style.top = startY + 'px';
+            
+            // Clone the fireball SVG
+            const svg = document.getElementById('fireball-template').cloneNode(true);
+            svg.removeAttribute('id');
+            fireball.appendChild(svg);
+            
+            gameContainer.appendChild(fireball);
+
+            // Calculate direction and speed
+            const dx = targetX - startX;
+            const dy = targetY - startY;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            const speed = 5; // pixels per frame
+            
+            const velocityX = (dx / distance) * speed;
+            const velocityY = (dy / distance) * speed;
+
+            return {
+                element: fireball,
+                x: startX,
+                y: startY,
+                vx: velocityX,
+                vy: velocityY
+            };
+        }
+
+        // Create dust explosion
+        function createDust(x, y) {
+            const dust = document.createElement('div');
+            dust.className = 'dust';
+            dust.style.left = (x - 30) + 'px'; // Center the dust
+            dust.style.top = (y - 30) + 'px';
+            
+            // Clone the dust SVG
+            const svg = document.getElementById('dust-template').cloneNode(true);
+            svg.removeAttribute('id');
+            dust.appendChild(svg);
+            
+            gameContainer.appendChild(dust);
+
+            // Remove after animation
+            setTimeout(() => {
+                dust.remove();
+            }, 600);
+        }
+
+        // Check collision with borders
+        function checkBorderCollision(fireball) {
+            const margin = 20; // Collision distance from edge
+            
+            if (fireball.x <= margin || 
+                fireball.x >= window.innerWidth - margin || 
+                fireball.y <= margin || 
+                fireball.y >= window.innerHeight - margin) {
+                return true;
+            }
+            return false;
+        }
+
+        // Animation loop
+        function animate() {
+            for (let i = fireballs.length - 1; i >= 0; i--) {
+                const fireball = fireballs[i];
+                
+                // Update position
+                fireball.x += fireball.vx;
+                fireball.y += fireball.vy;
+                
+                fireball.element.style.left = fireball.x + 'px';
+                fireball.element.style.top = fireball.y + 'px';
+
+                // Check border collision
+                if (checkBorderCollision(fireball)) {
+                    // Create dust at collision point
+                    createDust(fireball.x, fireball.y);
+                    
+                    // Remove fireball
+                    fireball.element.remove();
+                    fireballs.splice(i, 1);
+                }
+            }
+
+            requestAnimationFrame(animate);
+        }
+
+        // Handle clicks
+        gameContainer.addEventListener('click', (e) => {
+            const catPos = getCatPosition();
+            const targetX = e.clientX;
+            const targetY = e.clientY;
+
+            // Create and launch fireball
+            const fireball = createFireball(catPos.x, catPos.y, targetX, targetY);
+            fireballs.push(fireball);
+
+            // Optional: Make cat look at click direction
+            const angle = Math.atan2(targetY - catPos.y, targetX - catPos.x);
+            const degrees = angle * (180 / Math.PI);
+            cat.style.transform = `translate(-50%, -50%) rotate(${degrees}deg)`;
+            
+            // Reset cat rotation after a short delay
+            setTimeout(() => {
+                cat.style.transform = 'translate(-50%, -50%)';
+            }, 200);
+        });
+
+        // Start animation loop
+        animate();
+    </script>
+</body>
+</html>
