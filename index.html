@@ -110,6 +110,89 @@
             bottom: 0;
             width: 2px;
         }
+
+        /* Solo mode: scoreboard */
+        #scoreboard {
+            position: absolute;
+            top: 16px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+            color: #fff;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            font-size: 24px;
+            font-weight: 700;
+            text-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+            pointer-events: none;
+            user-select: none;
+        }
+
+        /* Solo mode: smiley target */
+        #target {
+            position: absolute;
+            width: 64px;
+            height: 64px;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.3));
+        }
+
+        #target svg {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Solo mode: win screen */
+        #win-screen {
+            position: absolute;
+            inset: 0;
+            z-index: 20;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 0, 0, 0.45);
+        }
+
+        #win-screen.hidden {
+            display: none;
+        }
+
+        .win-card {
+            background: #fff;
+            padding: 40px 56px;
+            border-radius: 18px;
+            text-align: center;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+        }
+
+        .win-card h1 {
+            color: #764ba2;
+            font-size: 40px;
+            margin-bottom: 8px;
+        }
+
+        .win-card p {
+            color: #555;
+            margin-bottom: 24px;
+            font-size: 18px;
+        }
+
+        .win-card button {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: #fff;
+            border: none;
+            padding: 14px 32px;
+            font-size: 18px;
+            font-weight: 700;
+            border-radius: 999px;
+            cursor: pointer;
+            transition: transform 0.1s;
+        }
+
+        .win-card button:hover {
+            transform: scale(1.05);
+        }
     </style>
 </head>
 <body>
@@ -120,9 +203,31 @@
         <div class="border left"></div>
         <div class="border right"></div>
 
+        <!-- Scoreboard (solo mode) -->
+        <div id="scoreboard">Hits: 0 / 10</div>
+
         <!-- Cat element -->
         <div id="cat">
             <img src="images/cat.svg" alt="cat">
+        </div>
+
+        <!-- Smiley target (solo mode) -->
+        <div id="target">
+            <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="50" cy="50" r="46" fill="#ffd23f" stroke="#e6a700" stroke-width="3"/>
+                <circle cx="36" cy="40" r="6" fill="#333"/>
+                <circle cx="64" cy="40" r="6" fill="#333"/>
+                <path d="M30 58 Q50 80 70 58" stroke="#333" stroke-width="6" fill="none" stroke-linecap="round"/>
+            </svg>
+        </div>
+
+        <!-- Win screen (solo mode) -->
+        <div id="win-screen" class="hidden">
+            <div class="win-card">
+                <h1>You Win! 🎉</h1>
+                <p>You hit the smiley 10 times.</p>
+                <button id="play-again">Play Again</button>
+            </div>
         </div>
     </div>
 
@@ -148,6 +253,22 @@
         const gameContainer = document.getElementById('game-container');
         const cat = document.getElementById('cat');
         const fireballs = [];
+
+        // --- Solo mode: moving smiley target + scoring ---
+        const targetEl = document.getElementById('target');
+        const scoreboard = document.getElementById('scoreboard');
+        const winScreen = document.getElementById('win-screen');
+        const playAgainBtn = document.getElementById('play-again');
+
+        const WIN_SCORE = 10;
+        const TARGET_SIZE = 64;
+        const TARGET_RADIUS = TARGET_SIZE / 2;
+        const FIREBALL_RADIUS = 20;
+
+        let score = 0;
+        let gameActive = true;
+
+        const target = { x: 0, y: 0, vx: 0, vy: 0 };
 
         // Get cat center position
         function getCatPosition() {
@@ -210,6 +331,89 @@
             }, 600);
         }
 
+        // --- Solo target helpers ---
+
+        // Place the smiley at a random spot with a random Pong-style velocity
+        function spawnTarget() {
+            const w = window.innerWidth;
+            const h = window.innerHeight;
+            target.x = TARGET_RADIUS + Math.random() * (w - TARGET_SIZE);
+            target.y = TARGET_RADIUS + Math.random() * (h - TARGET_SIZE);
+
+            const speed = 4;
+            const angle = Math.random() * Math.PI * 2;
+            target.vx = Math.cos(angle) * speed;
+            target.vy = Math.sin(angle) * speed;
+
+            drawTarget();
+        }
+
+        function drawTarget() {
+            targetEl.style.left = target.x + 'px';
+            targetEl.style.top = target.y + 'px';
+        }
+
+        // Move the target and bounce it off the walls (Pong-style)
+        function updateTarget() {
+            target.x += target.vx;
+            target.y += target.vy;
+
+            const w = window.innerWidth;
+            const h = window.innerHeight;
+
+            if (target.x <= TARGET_RADIUS) {
+                target.x = TARGET_RADIUS;
+                target.vx = Math.abs(target.vx);
+            } else if (target.x >= w - TARGET_RADIUS) {
+                target.x = w - TARGET_RADIUS;
+                target.vx = -Math.abs(target.vx);
+            }
+
+            if (target.y <= TARGET_RADIUS) {
+                target.y = TARGET_RADIUS;
+                target.vy = Math.abs(target.vy);
+            } else if (target.y >= h - TARGET_RADIUS) {
+                target.y = h - TARGET_RADIUS;
+                target.vy = -Math.abs(target.vy);
+            }
+
+            drawTarget();
+        }
+
+        // Does this fireball overlap the target?
+        function hitsTarget(fireball) {
+            const cx = fireball.x + FIREBALL_RADIUS;
+            const cy = fireball.y + FIREBALL_RADIUS;
+            const dx = cx - target.x;
+            const dy = cy - target.y;
+            return Math.hypot(dx, dy) < TARGET_RADIUS + FIREBALL_RADIUS;
+        }
+
+        function updateScoreboard() {
+            scoreboard.textContent = `Hits: ${score} / ${WIN_SCORE}`;
+        }
+
+        function registerHit() {
+            score++;
+            updateScoreboard();
+            if (score >= WIN_SCORE) {
+                gameActive = false;
+                winScreen.classList.remove('hidden');
+            } else {
+                spawnTarget();
+            }
+        }
+
+        function resetGame() {
+            score = 0;
+            updateScoreboard();
+            for (const fb of fireballs) fb.element.remove();
+            fireballs.length = 0;
+            winScreen.classList.add('hidden');
+            spawnTarget();
+            gameActive = true;
+        }
+
         // Check collision with borders
         function checkBorderCollision(fireball) {
             const margin = 20; // Collision distance from edge
@@ -225,21 +429,34 @@
 
         // Animation loop
         function animate() {
+            if (gameActive) {
+                updateTarget();
+            }
+
             for (let i = fireballs.length - 1; i >= 0; i--) {
                 const fireball = fireballs[i];
-                
+
                 // Update position
                 fireball.x += fireball.vx;
                 fireball.y += fireball.vy;
-                
+
                 fireball.element.style.left = fireball.x + 'px';
                 fireball.element.style.top = fireball.y + 'px';
+
+                // Hit the moving target?
+                if (gameActive && hitsTarget(fireball)) {
+                    createDust(target.x, target.y);
+                    fireball.element.remove();
+                    fireballs.splice(i, 1);
+                    registerHit();
+                    continue;
+                }
 
                 // Check border collision
                 if (checkBorderCollision(fireball)) {
                     // Create dust at collision point
                     createDust(fireball.x, fireball.y);
-                    
+
                     // Remove fireball
                     fireball.element.remove();
                     fireballs.splice(i, 1);
@@ -251,6 +468,8 @@
 
         // Handle clicks
         gameContainer.addEventListener('click', (e) => {
+            if (!gameActive) return;
+
             const catPos = getCatPosition();
             const targetX = e.clientX;
             const targetY = e.clientY;
@@ -270,7 +489,15 @@
             }, 200);
         });
 
-        // Start animation loop
+        // Play again resets the round
+        playAgainBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            resetGame();
+        });
+
+        // Start the round
+        updateScoreboard();
+        spawnTarget();
         animate();
     </script>
 </body>
