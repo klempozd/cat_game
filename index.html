@@ -213,6 +213,23 @@
             <circle cx="50" cy="50" r="25" fill="#ffcc00"/>
         </svg>
 
+        <!-- Rainbow ball SVG template (rare; deals 2 hits) -->
+        <svg id="rainbow-template" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="50" cy="50" r="48" fill="#ff3b3b"/>
+            <circle cx="50" cy="50" r="40" fill="#ff9500"/>
+            <circle cx="50" cy="50" r="32" fill="#ffe000"/>
+            <circle cx="50" cy="50" r="24" fill="#2ecc55"/>
+            <circle cx="50" cy="50" r="16" fill="#3b86ff"/>
+            <circle cx="50" cy="50" r="8" fill="#a14bff"/>
+        </svg>
+
+        <!-- Yellow fireball SVG template (very rare; deals 5 hits) -->
+        <svg id="yellow-template" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="50" cy="50" r="46" fill="#ffcf00"/>
+            <circle cx="50" cy="50" r="33" fill="#ffe54d"/>
+            <circle cx="50" cy="50" r="20" fill="#fffbcc"/>
+        </svg>
+
         <!-- Dust SVG template -->
         <svg id="dust-template" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
             <circle cx="30" cy="30" r="15" fill="#999" opacity="0.6"/>
@@ -243,7 +260,7 @@
         const SMILEY_SIZE = 128;
         const SMILEY_RADIUS = SMILEY_SIZE / 2;
         const FIREBALL_RADIUS = 20;
-        const SMILEY_SPEED = 4;
+        const SMILEY_SPEED = 3.2;
 
         let round = 0;
         let gameActive = true;
@@ -266,8 +283,23 @@
             fireball.style.left = startX + 'px';
             fireball.style.top = startY + 'px';
 
-            // Clone the fireball SVG
-            const svg = document.getElementById('fireball-template').cloneNode(true);
+            // Roll once for a special ball:
+            //   2% yellow  → 5 hits
+            //   5% rainbow → 2 hits
+            //   otherwise normal → 1 hit
+            const roll = Math.random();
+            let templateId = 'fireball-template';
+            let damage = 1;
+            if (roll < 0.02) {
+                templateId = 'yellow-template';
+                damage = 5;
+            } else if (roll < 0.07) {
+                templateId = 'rainbow-template';
+                damage = 2;
+            }
+
+            // Clone the matching SVG
+            const svg = document.getElementById(templateId).cloneNode(true);
             svg.removeAttribute('id');
             fireball.appendChild(svg);
 
@@ -287,7 +319,8 @@
                 x: startX,
                 y: startY,
                 vx: velocityX,
-                vy: velocityY
+                vy: velocityY,
+                damage: damage
             };
         }
 
@@ -389,8 +422,8 @@
         }
 
         // Register a hit on a smiley; clears it (and advances the round) when drained
-        function registerSmileyHit(s) {
-            s.hitsLeft--;
+        function registerSmileyHit(s, damage = 1) {
+            s.hitsLeft -= damage;
 
             if (s.hitsLeft > 0) {
                 s.countEl.textContent = s.hitsLeft;
@@ -424,6 +457,8 @@
 
         // Start round n: clear any leftovers and spawn n fresh smileys
         function startRound(n) {
+            // Smiley count climbs each round, but resets once it reaches ~10
+            if (n > 10) n = 1;
             round = n;
             for (const s of smileys) s.element.remove();
             smileys.length = 0;
@@ -476,7 +511,7 @@
                     createDust(hitSmiley.x, hitSmiley.y);
                     fireball.element.remove();
                     fireballs.splice(i, 1);
-                    registerSmileyHit(hitSmiley);
+                    registerSmileyHit(hitSmiley, fireball.damage);
                     continue;
                 }
 
